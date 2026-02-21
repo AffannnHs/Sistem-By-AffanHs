@@ -15,9 +15,12 @@ function isUnsafeSupabaseKey(value: string | undefined) {
   return value.startsWith('sb_secret_')
 }
 
-export const hasSupabaseEnv = isValidSupabaseUrl(import.meta.env.VITE_SUPABASE_URL) && !isUnsafeSupabaseKey(import.meta.env.VITE_SUPABASE_ANON_KEY)
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string | undefined
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined
 
-export const supabase: SupabaseClient | null = hasSupabaseEnv
-  ? createClient(import.meta.env.VITE_SUPABASE_URL, import.meta.env.VITE_SUPABASE_ANON_KEY)
-  : null
+if (!isValidSupabaseUrl(supabaseUrl) || isUnsafeSupabaseKey(supabaseAnonKey)) {
+  throw new Error('Konfigurasi Supabase belum benar. Pastikan VITE_SUPABASE_URL dan VITE_SUPABASE_ANON_KEY terisi (ANON, bukan SERVICE_ROLE).')
+}
+
+export const supabase: SupabaseClient = createClient(supabaseUrl, supabaseAnonKey)
 

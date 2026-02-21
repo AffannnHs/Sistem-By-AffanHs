@@ -3,6 +3,26 @@ import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { Bell, ChevronDown, Keyboard, Menu, UserCircle2 } from 'lucide-react'
 import { useUIStore } from '@/stores/uiStore'
 import { useSessionStore } from '@/stores/sessionStore'
+import { useNotifications } from '@/hooks/useNotifications'
+
+function notifIcon(type: string) {
+  if (type === 'ALERT_NEW') return '🚨'
+  if (type === 'USER_PENDING') return '👤'
+  if (type === 'ALERT_RESOLVED') return '✅'
+  return '📡'
+}
+
+function fromNowLabel(iso: string) {
+  const t = new Date(iso).getTime()
+  const s = Math.max(0, Math.floor((Date.now() - t) / 1000))
+  if (s < 60) return `${s} dtk lalu`
+  const m = Math.floor(s / 60)
+  if (m < 60) return `${m} mnt lalu`
+  const h = Math.floor(m / 60)
+  if (h < 24) return `${h} jam lalu`
+  const d = Math.floor(h / 24)
+  return `${d} hari lalu`
+}
 
 function titleFromPath(pathname: string) {
   if (pathname === '/dashboard') return 'Dashboard'
@@ -21,6 +41,7 @@ export default function Navbar() {
   const setShortcutsOpen = useUIStore((s) => s.setShortcutsOpen)
   const user = useSessionStore((s) => s.user)
   const logout = useSessionStore((s) => s.logout)
+  const { notifications, unreadCount, markAllRead } = useNotifications()
 
   const [bellOpen, setBellOpen] = useState(false)
   const [userOpen, setUserOpen] = useState(false)
@@ -77,20 +98,44 @@ export default function Navbar() {
               aria-label="Notifikasi"
             >
               <Bell className="h-5 w-5" />
-              <span className="absolute -right-1 -top-1 grid h-5 w-5 place-items-center rounded-full bg-red-500 text-[10px] font-bold text-white">5</span>
+              {unreadCount > 0 ? (
+                <span className="absolute -right-1 -top-1 grid h-5 min-w-5 place-items-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white">
+                  {unreadCount}
+                </span>
+              ) : null}
             </button>
             {bellOpen ? (
               <div className="absolute right-0 top-11 w-[320px] rounded-2xl border border-[var(--border)] bg-[var(--panel)] p-2 shadow-xl">
-                {[
-                  { t: '🔥 Alert kebakaran baru — Cibinong', s: '2 mnt lalu' },
-                  { t: '👤 Rudi Hermawan menunggu approval', s: '15 mnt lalu' },
-                  { t: '✅ Alert medis diselesaikan', s: '1 jam lalu' },
-                ].map((n) => (
-                  <div key={n.t} className="rounded-xl px-3 py-2 hover:bg-white/10">
-                    <div className="text-sm text-slate-200">{n.t}</div>
-                    <div className="mt-0.5 text-xs text-slate-400">{n.s}</div>
+                {notifications.length === 0 ? (
+                  <div className="rounded-xl px-3 py-6 text-center">
+                    <div className="text-3xl">🎉</div>
+                    <div className="mt-2 text-sm text-slate-200">Tidak ada notifikasi</div>
+                    <div className="mt-1 text-xs text-slate-400">Semua aman saat ini</div>
                   </div>
-                ))}
+                ) : (
+                  notifications.map((n) => (
+                    <button
+                      key={n.id}
+                      type="button"
+                      className={`mt-1 w-full rounded-xl px-3 py-2 text-left hover:bg-white/10 ${n.read ? '' : 'bg-white/5'}`}
+                      onClick={() => {
+                        markAllRead()
+                        setBellOpen(false)
+                        navigate(n.link)
+                      }}
+                    >
+                      <div className="flex items-start gap-3">
+                        <div className="mt-0.5 text-lg">{notifIcon(n.type)}</div>
+                        <div className="min-w-0 flex-1">
+                          <div className="text-sm font-semibold text-slate-200">{n.title}</div>
+                          <div className="mt-0.5 text-xs text-slate-400">{n.message}</div>
+                          <div className="mt-1 text-[11px] text-slate-500">{fromNowLabel(n.created_at)}</div>
+                        </div>
+                        {!n.read ? <div className="mt-2 h-2 w-2 flex-none rounded-full bg-red-500" /> : null}
+                      </div>
+                    </button>
+                  ))
+                )}
                 <div className="my-2 h-px bg-white/10" />
                 <Link to="/dashboard/alerts" className="block rounded-xl px-3 py-2 text-sm font-semibold text-blue-200 hover:bg-white/10">
                   Lihat Semua Notifikasi
@@ -118,9 +163,6 @@ export default function Navbar() {
               <div className="absolute right-0 top-11 w-52 rounded-2xl border border-[var(--border)] bg-[var(--panel)] p-2 shadow-xl">
                 <Link to="/dashboard/users" className="block rounded-xl px-3 py-2 text-sm text-slate-200 hover:bg-white/10">
                   👤 Profil
-                </Link>
-                <Link to="/dashboard/settings" className="mt-1 block rounded-xl px-3 py-2 text-sm text-slate-200 hover:bg-white/10">
-                  ⚙️ Pengaturan
                 </Link>
                 <button
                   className="mt-1 w-full rounded-xl px-3 py-2 text-left text-sm text-red-200 hover:bg-red-500/10"

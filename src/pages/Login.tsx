@@ -3,7 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom'
 import { Eye, EyeOff, Siren } from 'lucide-react'
 import { useSessionStore } from '@/stores/sessionStore'
 import { useToastStore } from '@/stores/toastStore'
-import { hasSupabaseEnv, supabase } from '@/utils/supabase'
+import { supabase } from '@/utils/supabase'
 
 export default function Login() {
   const navigate = useNavigate()
@@ -27,51 +27,95 @@ export default function Login() {
     if (!canSubmit) return
     setLoadingUI(true)
 
-    await new Promise((r) => setTimeout(r, 1500))
-
-    if (email.trim().toLowerCase() === 'admin@emergency.com' && password === 'admin123') {
-      setUser({
-        id: '1',
-        name: 'Ahmad Fauzi',
-        email: 'admin@emergency.com',
-        role: 'SUPER_ADMIN',
-        status: 'ACTIVE',
+    try {
+      const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
+        email: email.trim(),
+        password,
       })
-      pushToast({ type: 'success', title: 'Login berhasil', message: 'Selamat datang di Dashboard.', durationMs: 5000 })
-      setLoadingUI(false)
-      navigate(next, { replace: true })
-      return
-    }
 
-    if (hasSupabaseEnv && supabase) {
-      const { data, error } = await supabase.auth.signInWithPassword({ email, password })
-      if (error || !data.session) {
+      if (authError || !authData.user) {
         setError('Email atau password salah. Silakan coba lagi.')
-        setLoadingUI(false)
         return
       }
-      setUser({
-        id: data.session.user.id,
-        name:
-          (data.session.user.user_metadata?.name as string | undefined) ??
-          data.session.user.email ??
-          'User',
-        email: data.session.user.email ?? '-',
-        role: ((data.session.user.user_metadata?.role as string | undefined) ?? 'ADMIN') as
-          | 'SUPER_ADMIN'
-          | 'ADMIN'
-          | 'COORDINATOR'
-          | 'MEMBER',
-        status: 'ACTIVE',
-      })
-      pushToast({ type: 'success', title: 'Login berhasil', message: 'Sesi Supabase aktif.', durationMs: 5000 })
-      setLoadingUI(false)
-      navigate(next, { replace: true })
-      return
-    }
 
-    setError('Email atau password salah. Silakan coba lagi.')
-    setLoadingUI(false)
+      const userId = authData.user.id
+      const { data: userRow, error: userError } = await supabase
+        .from('users')
+        .select('id, name, email, role, status')
+        .eq('id', userId)
+        .maybeSingle()
+
+      if (userError) {
+        setError('Gagal mengambil data user. Silakan coba lagi.')
+        return
+      }
+
+      if (!userRow) {
+        const name = (authData.user.user_metadata?.name as string | undefined) ?? authData.user.email ?? 'User'
+        const userEmail = authData.user.email ?? '-'
+        await supabase.from('users').insert({ id: userId, name, email: userEmail, role: 'MEMBER', status: 'PENDING' })
+        setUser({ id: userId, name, email: userEmail, role: 'MEMBER', status: 'PENDING' })
+        pushToast({ type: 'info', title: 'Akun terdaftar', message: 'Akun Anda menunggu persetujuan.', durationMs: 5000 })
+        navigate('/pending', { replace: true })
+        return
+      }
+
+      const rawStatus = (userRow.status ?? 'PENDING') as string
+      if (rawStatus === 'REJECTED') {
+        setError('Pendaftaran Anda ditolak. Hubungi administrator.')
+        await supabase.auth.signOut()
+        return
+      }
+
+      const nextUser = {
+        id: userRow.id,
+        name: userRow.name ?? authData.user.email ?? 'User',
+        email: userRow.email ?? authData.user.email ?? '-',
+        role: (userRow.role ?? 'MEMBER') as 'SUPER_ADMIN' | 'ADMIN' | 'COORDINATOR' | 'MEMBER',
+        status: (rawStatus ?? 'PENDING') as 'ACTIVE' | 'PENDING' | 'SUSPENDED',
+      }
+
+      setUser(nextUser)
+
+      if (nextUser.status === 'PENDING') {
+        const { data: boot } = await supabase.rpc('bootstrap_first_super_admin')
+        if (boot) {
+          const { data: promoted } = await supabase
+            .from('users')
+            .select('id, name, email, role, status')
+            .eq('id', userId)
+            .maybeSingle()
+          if (promoted && promoted.status === 'ACTIVE') {
+            setUser({
+              id: promoted.id,
+              name: promoted.name ?? authData.user.email ?? 'User',
+              email: promoted.email ?? authData.user.email ?? '-',
+              role: (promoted.role ?? 'SUPER_ADMIN') as 'SUPER_ADMIN' | 'ADMIN' | 'COORDINATOR' | 'MEMBER',
+              status: 'ACTIVE',
+            })
+            pushToast({ type: 'success', title: 'Bootstrap admin', message: '✅ Akun pertama diaktifkan sebagai SUPER_ADMIN.', durationMs: 6000 })
+            navigate(next, { replace: true })
+            return
+          }
+        }
+        pushToast({ type: 'info', title: 'Menunggu persetujuan', message: 'Akun Anda masih PENDING.', durationMs: 5000 })
+        navigate('/pending', { replace: true })
+        return
+      }
+
+      if (nextUser.status === 'SUSPENDED') {
+        setError('Akun Anda ditangguhkan. Hubungi administrator.')
+        await supabase.auth.signOut()
+        return
+      }
+
+      pushToast({ type: 'success', title: 'Login berhasil', message: 'Sesi Supabase aktif.', durationMs: 5000 })
+      navigate(next, { replace: true })
+    } catch {
+      setError('Terjadi kesalahan. Silakan coba lagi.')
+    } finally {
+      setLoadingUI(false)
+    }
   }
 
   return (

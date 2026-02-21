@@ -4,6 +4,7 @@ import ToastManager from '@/components/ToastManager'
 import ShortcutsModal from '@/components/ShortcutsModal'
 import GlobalHotkeys from '@/components/GlobalHotkeys'
 import { hydrateSession } from '@/stores/sessionStore'
+import { supabase } from '@/utils/supabase'
 import ProtectedRoute from '@/routes/ProtectedRoute'
 import PendingRoute from '@/routes/PendingRoute'
 import DashboardLayout from '@/layouts/DashboardLayout'
@@ -23,6 +24,12 @@ import Kiosk from '@/pages/dashboard/live-map/Kiosk'
 export default function App() {
   useEffect(() => {
     void hydrateSession()
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange(() => {
+      void hydrateSession()
+    })
+    return () => subscription.unsubscribe()
   }, [])
 
   return (

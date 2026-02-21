@@ -1,6 +1,6 @@
-import type { Severity } from '@/mock/types'
+import type { DbAlertSeverity } from '@/hooks/useSupabase'
 
-export default function AlertBorderEffect({ severity }: { severity: Severity | null }) {
+export default function AlertBorderEffect({ severity }: { severity: DbAlertSeverity | null | undefined }) {
   if (!severity) return null
   const anim =
     severity === 'CRITICAL' ? 'border-critical 0.2s infinite' : severity === 'HIGH' ? 'border-high 0.8s infinite' : 'border-medium 1.5s infinite'
